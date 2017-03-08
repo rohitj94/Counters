@@ -1,0 +1,74 @@
+import java.io.IOException;
+import org.apache.hadoop.conf.*;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+
+public class CounterExample extends Configured implements Tool
+{
+	public enum CustomCounters
+	{
+		FAILED_RECORDS, PASSED_RECORDS;
+	}
+	static class CustomCounterMapper extends Mapper<LongWritable,Text,Text,Text>
+	{
+		protected Text outputValue = new Text();
+		protected Text mapperOutputKey = new Text();
+		protected int failedRecords;
+		
+		protected void map(LongWritable key, Text value, Context context) throws InterruptedException, IOException
+		{
+				String[] values = value.toString().split("\\|");
+				if(!("NA".equalsIgnoreCase(values[0]))&&!("NA".equalsIgnoreCase(values[1])))
+				{
+					mapperOutputKey.set(values[0]);
+				    outputValue.set(values[1]);
+				    context.getCounter(CustomCounters.PASSED_RECORDS).increment(1);
+				    context.write(mapperOutputKey, outputValue);
+				}
+				else
+				context.getCounter(CustomCounters.FAILED_RECORDS).increment(1);
+		}
+	}
+	public int run(String[] args) throws Exception
+	{
+		Configuration conf = new Configuration();
+		Job job = new Job(conf, "TVDetails");
+		
+		job.setJarByClass(CounterExample.class);
+		
+		job.setMapperClass(CustomCounterMapper.class);
+		job.setNumReduceTasks(0);
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(IntWritable.class);
+        	
+		job.setInputFormatClass(TextInputFormat.class);
+		job.setOutputFormatClass(TextOutputFormat.class);
+		
+		FileInputFormat.addInputPath(job, new Path(args[0]));
+		FileOutputFormat.setOutputPath(job,new Path(args[1]));
+		
+		int a = job.waitForCompletion(true)?0:1;
+		
+		Counters c = job.getCounters();
+		c.findCounter(CustomCounters.PASSED_RECORDS).getValue();
+		c.findCounter(CustomCounters.FAILED_RECORDS).getValue();
+		
+		return a;
+	}
+	
+	public static void main(String args[]) throws Exception
+	{
+		//Logger log = Logger.getLogger(CCounter.);
+		int exitcode = ToolRunner.run(new CounterExample(), args);
+		System.exit(exitcode);
+	}
+}
